@@ -30,9 +30,8 @@ DEBUG = os.environ.get('DEBUG', 'False').lower() == 'true'
 #DATABASE = r"C:\Users\0\OneDrive\Рабочий стол\MyPythonProjects\Python_lessons\budget_upp\database.sqlite"
 
 # Путь к базе
-DATABASE = r"C:\Users\0\OneDrive\Рабочий стол\budget_app\database.sqlite"
 #C:\Users\0\OneDrive\Рабочий стол\budget_app\database.sqlite
-
+DATABASE = "budget.db"
 app = Flask(__name__)
 app.secret_key = SECRET_KEY
 app.config['DEBUG'] = DEBUG

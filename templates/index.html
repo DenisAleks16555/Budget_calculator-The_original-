@@ -7,12 +7,12 @@
     <script src="{{ url_for('static', filename='script.js') }}"></script>
 </head>
 <body>
-    <!-- Логин-форма (теперь стилизована в CSS) -->
+    {% comment %} <!-- Логин-форма (теперь стилизована в CSS) -->
     <div id="loginSection">
         <input type="text" id="username" placeholder="Имя пользователя" />
         <input type="password" id="password" placeholder="Пароль" />
         <button onclick="login()">Войти</button>
-    </div>
+    </div> {% endcomment %}
 
     <!-- Основной контейнер с полупрозрачным фоном поверх изображения -->
     <div class="container">

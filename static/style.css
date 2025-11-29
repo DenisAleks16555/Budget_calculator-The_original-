@@ -12,16 +12,16 @@ body {
     color: #333;  /* Тёмный текст */
 }
 
-/* Логин-форма (сверху, полупрозрачная) */
+/* Логин-форма (сверху, полупрозрачная)
 #loginSection {
-    background-color: rgba(255, 255, 255, 0.9);  /* Полупрозрачный белый */
+    background-color: rgba(255, 255, 255, 0.9);  
     padding: 20px;
     text-align: center;
     max-width: 300px;
-    margin: 20px auto;  /* Центрируем */
+    margin: 20px auto;  
     border-radius: 10px;
-    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);  /* Тень */
-}
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1); 
+} 
 
 #loginSection input {
     display: block;
@@ -45,7 +45,7 @@ body {
 #loginSection button:hover {
     background-color: #45a049;
 }
-
+*/
 /* Основной контейнер — поверх фона */
 .container {
     max-width: 1000px;  /* Шире для таблицы */
@@ -56,7 +56,7 @@ body {
     box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
 }
 
-/* Твои старые стили (адаптировал) */
+/* Мои старые стили (адаптировал) */
 h1 {
     color: #4CAF50;
     text-align: center;
