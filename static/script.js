@@ -1,34 +1,34 @@
-const users = [
-  { username: "ivan", password: "123", expenses: [] },
-  { username: "maria", password: "abc", expenses: [] },
-];
+// const users = [
+//   { username: "ivan", password: "123", expenses: [] },
+//   { username: "maria", password: "abc", expenses: [] },
+// ];
 
-let currentUser = null; // Сейчас никто не вошёл
-
-
-let expenses = [
-    // пример данных
-  { description: "Обед", amount: 10, date: "2023-10-01", category: "Еда" },
-  { description: "Такси", amount: 5, date: "2023-10-02", category: "Транспорт" },
-  { description: "Кино", amount: 15, date: "2023-10-01", category: "Развлечения" },
-];
+// let currentUser = null; // Сейчас никто не вошёл
 
 
-function login() {
-  const username = document.getElementById('username').value;
-  const password = document.getElementById('password').value;
+// let expenses = [
+//     // пример данных
+//   { description: "Обед", amount: 10, date: "2023-10-01", category: "Еда" },
+//   { description: "Такси", amount: 5, date: "2023-10-02", category: "Транспорт" },
+//   { description: "Кино", amount: 15, date: "2023-10-01", category: "Развлечения" },
+// ];
+
+
+// function login() {
+//   const username = document.getElementById('username').value;
+//   const password = document.getElementById('password').value;
   
-  const user = users.find(u => u.username === username && u.password === password);
+//   const user = users.find(u => u.username === username && u.password === password);
   
-  if (user) {
-    currentUser = user;
-    document.getElementById('loginSection').style.display = 'none'; // скрыть вход
-    document.getElementById('appSection').style.display = 'block'; // показать расходы
-    displayExpenses(currentUser.expenses);
-  } else {
-    alert('Неверное имя или пароль');
-  }
-}
+//   if (user) {
+//     currentUser = user;
+//     document.getElementById('loginSection').style.display = 'none'; // скрыть вход
+//     document.getElementById('appSection').style.display = 'block'; // показать расходы
+//     displayExpenses(currentUser.expenses);
+//   } else {
+//     alert('Неверное имя или пароль');
+//   }
+// }
 
 
 function displayExpenses(expenses) {
