@@ -1,37 +1,16 @@
 from flask import Flask, render_template, request, redirect, url_for
 from dotenv import load_dotenv
 import os
-# load_dotenv() # читает .env и кладёт значения в окружение
-
 import sqlite3
-from datetime import datetime
 from flask import jsonify
 
-load_dotenv() # читает .env и кладёт значения в окружение
+load_dotenv()
 
-
-#app = Flask(name)
-
-#Конфигурация из .env (если переменные не заданы — используются значения по умолчанию)
-SECRET_KEY = os.environ.get('SECRET_KEY', 'default-secret-key') 
+SECRET_KEY = os.environ.get('SECRET_KEY', 'default-secret-key')
 DEBUG = os.environ.get('DEBUG', 'False').lower() == 'true'
 
-#Путь к БД (удобно держать файл бюджета в repo, как сейчас)
+DATABASE = "budget.db"  # Упростил путь
 
-# app = Flask(__name__)
-# DATABASE = 'budget.db'
-
-#DATABASE = os.environ.get('DATABASE_URL', 'budget.db') # можно использовать 'budget.db' напрямую
-
-#app.secret_key = SECRET_KEY; app.config['DEBUG'] = DEBUG
-
-
-# Указываем путь к базе данных
-#DATABASE = r"C:\Users\0\OneDrive\Рабочий стол\MyPythonProjects\Python_lessons\budget_upp\database.sqlite"
-
-# Путь к базе
-#C:\Users\0\OneDrive\Рабочий стол\budget_app\database.sqlite
-DATABASE = "budget.db"
 app = Flask(__name__)
 app.secret_key = SECRET_KEY
 app.config['DEBUG'] = DEBUG
@@ -41,76 +20,32 @@ def get_db_connection():
     conn.row_factory = sqlite3.Row
     return conn
 
-# def get_db_connection():
-#     # Получаем директорию базы данных
-#     db_dir = os.path.dirname(DATABASE)
-#     # Создаём директорию, если её нет
-#     os.makedirs(db_dir, exist_ok=True)
-#     # Устанавливаем соединение
-#     conn = sqlite3.connect(DATABASE)
-#     return conn
-
-# Функция для инициализации базы (оставь одну версию)
 def init_db():
     with get_db_connection() as conn:
         cursor = conn.cursor()
-        # Пример создания таблицы, если она ещё не существует
         cursor.execute('''
             CREATE TABLE IF NOT EXISTS expenses (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 description TEXT NOT NULL,
                 amount REAL NOT NULL,
-                date TEXT NOT NULL
+                date TEXT NOT NULL,
+                category TEXT  -- Добавил столбец category
             )
         ''')
-        # Проверка и добавление начальных данных
         cursor.execute('SELECT COUNT(*) FROM expenses')
         count = cursor.fetchone()[0]
         if count == 0:
-            cursor.execute("INSERT INTO expenses (description, amount, date) VALUES (?, ?, ?)",
-                           ('Покупка продуктов', 5000, '2025-09-10'))
-            cursor.execute("INSERT INTO expenses (description, amount, date) VALUES (?, ?, ?)",
-                           ('Такси', 1200, '2025-09-10'))
+            cursor.execute("INSERT INTO expenses (description, amount, date, category) VALUES (?, ?, ?, ?)",
+                           ('Покупка продуктов', 5000, '2025-09-10', 'Еда'))
+            cursor.execute("INSERT INTO expenses (description, amount, date, category) VALUES (?, ?, ?, ?)",
+                           ('Такси', 1200, '2025-09-10', 'Транспорт'))
         conn.commit()
-       
 
-
-
-# def get_db_connection():
-#     # Если DATABASE содержит путь, можно использовать напрямую
-#     conn = sqlite3.connect(DATABASE)
-#     conn.row_factory = sqlite3.Row
-#     return conn
-
-# # Инициализация базы данных при запуске
-# def init_db():
-#     with get_db_connection() as conn:
-#         cursor = conn.cursor()
-#         # Создаем таблицу, если еще не существует
-#         cursor.execute('''
-#         CREATE TABLE IF NOT EXISTS expenses (
-#             id INTEGER PRIMARY KEY AUTOINCREMENT,
-#             description TEXT NOT NULL,
-#             amount REAL NOT NULL,
-#             date TEXT NOT NULL
-#         )
-#         ''')
-        # # Проверка и добавление начальных данных (если их еще нет)
-        # cursor.execute('SELECT COUNT(*) FROM expenses')
-        # count = cursor.fetchone()[0]
-        # if count == 0:
-        #     cursor.execute("INSERT INTO expenses (description, amount, date) VALUES (?, ?, ?)",
-        #                    ('Покупка продуктов', 5000, '2025-09-10'))
-        #     cursor.execute("INSERT INTO expenses (description, amount, date) VALUES (?, ?, ?)",
-        #                    ('Такси', 1200, '2025-09-10'))
-        # conn.commit()
-# Маршруты
 @app.route('/expenses')
 def get_expenses():
     conn = get_db_connection()
     expenses = conn.execute('SELECT * FROM expenses').fetchall()
     conn.close()
-    # преобразуем расходы в список словарей
     expenses_list = [dict(expense) for expense in expenses]
     return jsonify(expenses_list)
 
@@ -119,11 +54,8 @@ def index():
     conn = get_db_connection()
     expenses = conn.execute('SELECT * FROM expenses').fetchall()
     conn.close()
-    # cursor = conn.cursor()
-    # expenses = cursor.execute("SELECT * FROM expenses").fetchall()
-    total = sum([expense['amount'] for expense in expenses]) # Добавил total, так как он нужен в шаблоне
-    return render_template('index.html', expenses=expenses, total=total) 
-
+    total = sum([expense['amount'] for expense in expenses])
+    return render_template('index.html', expenses=expenses, total=total)
 
 @app.route('/add', methods=('GET', 'POST'))
 def add_expense():
@@ -131,10 +63,10 @@ def add_expense():
         description = request.form['description']
         amount = float(request.form['amount'])
         date = request.form['date']
+        category = request.form.get('category', '')  # Добавил обработку category
         conn = get_db_connection()
-        # c = conn.cursor()
-        conn.execute('INSERT INTO expenses (description, amount, date) VALUES (?, ?, ?)',
-                  (description, amount, date))
+        conn.execute('INSERT INTO expenses (description, amount, date, category) VALUES (?, ?, ?, ?)',
+                     (description, amount, date, category))
         conn.commit()
         conn.close()
         return redirect(url_for('index'))
@@ -142,27 +74,15 @@ def add_expense():
 
 @app.route('/delete/<int:expense_id>', methods=['POST'])
 def delete_expense(expense_id):
-    # тут нужно написать код удаления из базы данных
-    # например:
-    # db.execute('DELETE FROM expenses WHERE id=?', (expense_id,))
-    # или, если используете SQLAlchemy:
-    # expense = Expense.query.get(expense_id)
-    # db.session.delete(expense)
-    # db.session.commit()
     conn = get_db_connection()
-     # Здесь реализуем удаление из базы данных
-    # conn = sqlite3.connect('budget.db')
-
-    # c = conn.cursor()
     conn.execute('DELETE FROM expenses WHERE id=?', (expense_id,))
     conn.commit()
     conn.close()
     return redirect(url_for('index'))
 
 if __name__ == '__main__':
-    init_db()  # Инициализируем базу при запуске
-    app.run(debug=True) # app.run(debug=Debug)
-
+    init_db()
+    app.run(debug=True)
 
 # Сделать сайт удобным для мобильных устройств
 # Сделать так, чтобы сайт хорошо выглядел и работал на телефонах и планшетах. Это называется адаптивный дизайн.

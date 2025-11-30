@@ -1,108 +1,84 @@
-// const users = [
-//   { username: "ivan", password: "123", expenses: [] },
-//   { username: "maria", password: "abc", expenses: [] },
-// ];
+// Убрал users, currentUser, expenses (локальный массив), login, addExpense и т.д. — теперь данные из Flask.
 
-// let currentUser = null; // Сейчас никто не вошёл
+// Функция для загрузки расходов из Flask
+async function loadExpenses() {
+    try {
+        const response = await fetch('/expenses');
+        const expenses = await response.json();
+        displayExpenses(expenses);
+        updateTotal(expenses);
+    } catch (error) {
+        console.error('Ошибка загрузки расходов:', error);
+    }
+}
 
-
-// let expenses = [
-//     // пример данных
-//   { description: "Обед", amount: 10, date: "2023-10-01", category: "Еда" },
-//   { description: "Такси", amount: 5, date: "2023-10-02", category: "Транспорт" },
-//   { description: "Кино", amount: 15, date: "2023-10-01", category: "Развлечения" },
-// ];
-
-
-// function login() {
-//   const username = document.getElementById('username').value;
-//   const password = document.getElementById('password').value;
-  
-//   const user = users.find(u => u.username === username && u.password === password);
-  
-//   if (user) {
-//     currentUser = user;
-//     document.getElementById('loginSection').style.display = 'none'; // скрыть вход
-//     document.getElementById('appSection').style.display = 'block'; // показать расходы
-//     displayExpenses(currentUser.expenses);
-//   } else {
-//     alert('Неверное имя или пароль');
-//   }
-// }
-
-
+// Функция для отображения расходов в таблице
 function displayExpenses(expenses) {
-  const tableBody = document.getElementById('expensesBody');
-  tableBody.innerHTML = ''; // очистить старое
-  expenses.forEach((exp, index) => {
-    const row = document.createElement('tr');
-    row.innerHTML = `
-      <td>${exp.description}</td>
-      <td>${exp.amount}</td>
-      <td>${exp.date}</td>
-      <td contenteditable="true" onblur="updateCategory(${index}, this.innerText)">${exp.category || ''}</td>
-      <td>
-        <button onclick="deleteExpense(${index})">Удалить</button>
-      </td>
-    `;
-    tableBody.appendChild(row);
-  });
+    const tableBody = document.getElementById('expensesBody');
+    tableBody.innerHTML = ''; // Очистить таблицу
+    expenses.forEach((exp) => {
+        const row = document.createElement('tr');
+        row.innerHTML = `
+            <td>${exp.description}</td>
+            <td>${exp.amount}</td>
+            <td>${exp.date}</td>
+            <td>${exp.category || ''}</td>
+            <td>
+                <form method="POST" action="/delete/${exp.id}" style="display:inline;">
+                    <button type="submit" onclick="return confirm('Удалить?')">Удалить</button>
+                </form>
+            </td>
+        `;
+        tableBody.appendChild(row);
+    });
 }
 
-function updateCategory(index, newCategory) {
-  if (currentUser) {
-    currentUser.expenses[index].category = newCategory;
-    // тут можно сохранить в localStorage или базу
-  }
+// Функция для обновления итоговой суммы
+function updateTotal(expenses) {
+    const total = expenses.reduce((sum, exp) => sum + exp.amount, 0);
+    document.getElementById('totalAmount').textContent = total.toFixed(2);
 }
 
-function addExpense(description, amount, date, category) {
-  if (currentUser) {
-    currentUser.expenses.push({ description, amount, date, category });
-    displayExpenses(currentUser.expenses);
-  }
-}
-// function displayExpenses(filteredExpenses) {
-//   // эта функция показывает расходы на странице
-//   const tableBody = document.getElementById('expensesBody');
-//   tableBody.innerHTML = '';
-//   filteredExpenses.forEach((exp, index) => {
-//     const row = `<tr>
-//       <td>${exp.description}</td>
-//       <td>${exp.amount}</td>
-//       <td>${exp.date}</td>
-//       <td contenteditable="true" onblur="updateCategory(${index}, this.innerText)">${exp.category}</td>
-//     </tr>`;
-//     tableBody.innerHTML += row;
-//   });
-// }
-
-// Создайте функцию для обновления категории
-function updateCategory(index, newCategory) {
-  expenses[index].category = newCategory;
-  // Можно дополнительно сохранять в localStorage или базу данных
-}
-
-// функция для фильтрации по дате
+// Фильтрация по дате
 function filterByDate() {
-  const dateInput = document.getElementById('filterDate').value;
-  const filtered = expenses.filter(exp => exp.date === dateInput);
-  displayExpenses(filtered);
+    const dateInput = document.getElementById('filterDate').value;
+    if (!dateInput) {
+        alert('Введите дату для фильтрации');
+        return;
+    }
+    loadExpenses().then(() => {
+        const rows = Array.from(document.querySelectorAll('#expensesBody tr'));
+        rows.forEach(row => {
+            const dateCell = row.cells[2].textContent;
+            row.style.display = dateCell === dateInput ? '' : 'none';
+        });
+    });
 }
 
-// функция для сортировки по сумме
+// Сортировка по сумме (убывающая)
 function sortBySum() {
-  const sorted = [...expenses].sort((a, b) => b.amount - a.amount);
-  displayExpenses(sorted);
+    loadExpenses().then(() => {
+        const rows = Array.from(document.querySelectorAll('#expensesBody tr'));
+        rows.sort((a, b) => parseFloat(b.cells[1].textContent) - parseFloat(a.cells[1].textContent));
+        const tableBody = document.getElementById('expensesBody');
+        tableBody.innerHTML = '';
+        rows.forEach(row => tableBody.appendChild(row));
+    });
 }
 
-// функция для сортировки по дате
+// Сортировка по дате (возрастающая)
 function sortByDate() {
-  const sorted = [...expenses].sort((a, b) => new Date(a.date) - new Date(b.date));
-  displayExpenses(sorted);
+    loadExpenses().then(() => {
+        const rows = Array.from(document.querySelectorAll('#expensesBody tr'));
+        rows.sort((a, b) => new Date(a.cells[2].textContent) - new Date(b.cells[2].textContent));
+        const tableBody = document.getElementById('expensesBody');
+        tableBody.innerHTML = '';
+        rows.forEach(row => tableBody.appendChild(row));
+    });
 }
 
-
+// Загрузить расходы при загрузке страницы
+document.addEventListener('DOMContentLoaded', loadExpenses);
 
 
 
