@@ -9,7 +9,9 @@ load_dotenv()
 SECRET_KEY = os.environ.get('SECRET_KEY', 'default-secret-key')
 DEBUG = os.environ.get('DEBUG', 'False').lower() == 'true'
 
-DATABASE = "budget.db"  # Упростил путь
+# DATABASE = "budget.db"  # Упростил путь
+DATABASE = "/home/Aleks16555/BudgetCalculator/budget.db"
+
 
 app = Flask(__name__)
 app.secret_key = SECRET_KEY
