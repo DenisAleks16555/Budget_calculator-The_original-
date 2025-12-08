@@ -1,21 +1,38 @@
-from flask import Flask, render_template, request, redirect, url_for
+# import os
+# print("Текущая рабочая директория:", os.getcwd())
+# print("Содержимое папки:", os.listdir('.'))
+
+
+from flask import Flask, render_template, request, redirect, url_for, flash, jsonify
 from dotenv import load_dotenv
 import os
 import sqlite3
-from flask import jsonify
+from werkzeug.security import generate_password_hash, check_password_hash
+from flask_login import LoginManager, UserMixin, login_user, login_required, logout_user, current_user
 
 load_dotenv()
 
 SECRET_KEY = os.environ.get('SECRET_KEY', 'default-secret-key')
+# SECRET_KEY = 'my-super-secret-key-for-testing-12345'  # <-- Временно замените на это
+
 DEBUG = os.environ.get('DEBUG', 'False').lower() == 'true'
 
-# DATABASE = "budget.db"  # Упростил путь
-DATABASE = "/home/Aleks16555/BudgetCalculator/budget.db"
-
-
+DATABASE = os.path.join(os.path.dirname(__file__), 'budget.db')
+#DATABASE = "budget.db"
 app = Flask(__name__)
 app.secret_key = SECRET_KEY
 app.config['DEBUG'] = DEBUG
+
+# Настройка Flask-Login
+login_manager = LoginManager()
+login_manager.init_app(app)
+login_manager.login_view = 'login'
+
+# Класс User для Flask-Login
+class User(UserMixin):
+    def __init__(self, id, username):
+        self.id = id
+        self.username = username
 
 def get_db_connection():
     conn = sqlite3.connect(DATABASE)
@@ -25,59 +42,135 @@ def get_db_connection():
 def init_db():
     with get_db_connection() as conn:
         cursor = conn.cursor()
+        # 1. Создаем таблицу пользователей
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS user (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                username TEXT UNIQUE NOT NULL,
+                password_hash TEXT NOT NULL
+            )
+        ''')
+        # 2. Обновляем таблицу расходов, добавляем user_id
         cursor.execute('''
             CREATE TABLE IF NOT EXISTS expenses (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 description TEXT NOT NULL,
                 amount REAL NOT NULL,
                 date TEXT NOT NULL,
-                category TEXT  -- Добавил столбец category
+                category TEXT,
+                user_id INTEGER NOT NULL,
+                FOREIGN KEY (user_id) REFERENCES user (id)
             )
         ''')
-        cursor.execute('SELECT COUNT(*) FROM expenses')
-        count = cursor.fetchone()[0]
-        if count == 0:
-            cursor.execute("INSERT INTO expenses (description, amount, date, category) VALUES (?, ?, ?, ?)",
-                           ('Покупка продуктов', 5000, '2025-09-10', 'Еда'))
-            cursor.execute("INSERT INTO expenses (description, amount, date, category) VALUES (?, ?, ?, ?)",
-                           ('Такси', 1200, '2025-09-10', 'Транспорт'))
+        # 3. Проверяем, есть ли пользователи. Если нет - создаем тестового.
+        cursor.execute('SELECT COUNT(*) FROM user')
+        user_count = cursor.fetchone()[0]
+        if user_count == 0:
+            hashed_password = generate_password_hash('password')
+            cursor.execute("INSERT INTO user (username, password_hash) VALUES (?, ?)",
+                           ('test_user', hashed_password))
+            user_id = cursor.lastrowid
+            # Добавляем тестовые расходы для этого пользователя
+            cursor.execute("INSERT INTO expenses (description, amount, date, category, user_id) VALUES (?, ?, ?, ?, ?)",
+                           ('Покупка продуктов', 5000, '2025-09-10', 'Еда', user_id))
+            cursor.execute("INSERT INTO expenses (description, amount, date, category, user_id) VALUES (?, ?, ?, ?, ?)",
+                           ('Такси', 1200, '2025-09-10', 'Транспорт', user_id))
         conn.commit()
 
-@app.route('/expenses')
-def get_expenses():
+# Flask-Login загружает пользователя по ID.
+@login_manager.user_loader
+def load_user(user_id):
     conn = get_db_connection()
-    expenses = conn.execute('SELECT * FROM expenses').fetchall()
+    user = conn.execute('SELECT * FROM user WHERE id = ?', (user_id,)).fetchone()
+    conn.close()
+    if user is not None:
+        return User(user['id'], user['username'])
+    return None
+
+# Маршруты для аутентификации
+@app.route('/login', methods=['GET', 'POST'])
+def login():
+    if request.method == 'POST':
+        username = request.form['username']
+        password = request.form['password']
+        conn = get_db_connection()
+        user = conn.execute('SELECT * FROM user WHERE username = ?', (username,)).fetchone()
+        conn.close()
+
+        if user and check_password_hash(user['password_hash'], password):
+            user_obj = User(user['id'], user['username'])
+            login_user(user_obj)
+            return redirect(url_for('index'))
+        else:
+            flash('Неверное имя пользователя или пароль.')
+    return render_template('login.html')
+
+@app.route('/logout')
+@login_required
+def logout():
+    logout_user()
+    return redirect(url_for('index'))
+
+@app.route('/register', methods=['GET', 'POST'])
+def register():
+    if request.method == 'POST':
+        username = request.form['username']
+        password = request.form['password']
+        conn = get_db_connection()
+
+        try:
+            hashed_password = generate_password_hash(password)
+            conn.execute('INSERT INTO user (username, password_hash) VALUES (?, ?)',
+                         (username, hashed_password))
+            conn.commit()
+            flash('Регистрация прошла успешно! Теперь вы можете войти.')
+            return redirect(url_for('login'))
+        except sqlite3.IntegrityError:
+            flash('Это имя пользователя уже занято.')
+        finally:
+            conn.close()
+
+    return render_template('register.html')
+
+# Основные маршруты приложения
+@app.route('/')
+def index():
+    # Главная страница, перенаправит на логин если пользователь не авторизован
+    return render_template('index.html')
+
+@app.route('/expenses')
+@login_required  # Только для вошедших пользователей!
+def get_expenses():
+    # ВАЖНО: возвращаем только расходы текущего пользователя!
+    conn = get_db_connection()
+    expenses = conn.execute('SELECT * FROM expenses WHERE user_id = ?', (current_user.id,)).fetchall()
     conn.close()
     expenses_list = [dict(expense) for expense in expenses]
     return jsonify(expenses_list)
 
-@app.route('/')
-def index():
-    conn = get_db_connection()
-    expenses = conn.execute('SELECT * FROM expenses').fetchall()
-    conn.close()
-    total = sum([expense['amount'] for expense in expenses])
-    return render_template('index.html', expenses=expenses, total=total)
-
 @app.route('/add', methods=('GET', 'POST'))
+@login_required
 def add_expense():
     if request.method == 'POST':
         description = request.form['description']
         amount = float(request.form['amount'])
         date = request.form['date']
-        category = request.form.get('category', '')  # Добавил обработку category
+        category = request.form.get('category', '')
         conn = get_db_connection()
-        conn.execute('INSERT INTO expenses (description, amount, date, category) VALUES (?, ?, ?, ?)',
-                     (description, amount, date, category))
+        # ВАЖНО: добавляем расход с ID текущего пользователя!
+        conn.execute('INSERT INTO expenses (description, amount, date, category, user_id) VALUES (?, ?, ?, ?, ?)',
+                     (description, amount, date, category, current_user.id))
         conn.commit()
         conn.close()
         return redirect(url_for('index'))
     return render_template('add_expense.html')
 
 @app.route('/delete/<int:expense_id>', methods=['POST'])
+@login_required
 def delete_expense(expense_id):
+    # ВАЖНО: удаляем только если расход принадлежит текущему пользователю!
     conn = get_db_connection()
-    conn.execute('DELETE FROM expenses WHERE id=?', (expense_id,))
+    conn.execute('DELETE FROM expenses WHERE id=? AND user_id=?', (expense_id, current_user.id))
     conn.commit()
     conn.close()
     return redirect(url_for('index'))
@@ -85,6 +178,127 @@ def delete_expense(expense_id):
 if __name__ == '__main__':
     init_db()
     app.run(debug=True)
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+# from flask import Flask, render_template, request, redirect, url_for
+# from dotenv import load_dotenv
+# import os
+# import sqlite3
+# from flask import jsonify
+
+# load_dotenv()
+
+# SECRET_KEY = os.environ.get('SECRET_KEY', 'default-secret-key')
+# DEBUG = os.environ.get('DEBUG', 'False').lower() == 'true'
+
+# # DATABASE = "budget.db"  # Упростил путь
+# DATABASE = "/home/Aleks16555/BudgetCalculator/budget.db"
+
+
+# app = Flask(__name__)
+# app.secret_key = SECRET_KEY
+# app.config['DEBUG'] = DEBUG
+
+# def get_db_connection():
+#     conn = sqlite3.connect(DATABASE)
+#     conn.row_factory = sqlite3.Row
+#     return conn
+
+# def init_db():
+#     with get_db_connection() as conn:
+#         cursor = conn.cursor()
+#         cursor.execute('''
+#             CREATE TABLE IF NOT EXISTS expenses (
+#                 id INTEGER PRIMARY KEY AUTOINCREMENT,
+#                 description TEXT NOT NULL,
+#                 amount REAL NOT NULL,
+#                 date TEXT NOT NULL,
+#                 category TEXT  -- Добавил столбец category
+#             )
+#         ''')
+#         cursor.execute('SELECT COUNT(*) FROM expenses')
+#         count = cursor.fetchone()[0]
+#         if count == 0:
+#             cursor.execute("INSERT INTO expenses (description, amount, date, category) VALUES (?, ?, ?, ?)",
+#                            ('Покупка продуктов', 5000, '2025-09-10', 'Еда'))
+#             cursor.execute("INSERT INTO expenses (description, amount, date, category) VALUES (?, ?, ?, ?)",
+#                            ('Такси', 1200, '2025-09-10', 'Транспорт'))
+#         conn.commit()
+
+# @app.route('/expenses')
+# def get_expenses():
+#     conn = get_db_connection()
+#     expenses = conn.execute('SELECT * FROM expenses').fetchall()
+#     conn.close()
+#     expenses_list = [dict(expense) for expense in expenses]
+#     return jsonify(expenses_list)
+
+# @app.route('/')
+# def index():
+#     conn = get_db_connection()
+#     expenses = conn.execute('SELECT * FROM expenses').fetchall()
+#     conn.close()
+#     total = sum([expense['amount'] for expense in expenses])
+#     return render_template('index.html', expenses=expenses, total=total)
+
+# @app.route('/add', methods=('GET', 'POST'))
+# def add_expense():
+#     if request.method == 'POST':
+#         description = request.form['description']
+#         amount = float(request.form['amount'])
+#         date = request.form['date']
+#         category = request.form.get('category', '')  # Добавил обработку category
+#         conn = get_db_connection()
+#         conn.execute('INSERT INTO expenses (description, amount, date, category) VALUES (?, ?, ?, ?)',
+#                      (description, amount, date, category))
+#         conn.commit()
+#         conn.close()
+#         return redirect(url_for('index'))
+#     return render_template('add_expense.html')
+
+# @app.route('/delete/<int:expense_id>', methods=['POST'])
+# def delete_expense(expense_id):
+#     conn = get_db_connection()
+#     conn.execute('DELETE FROM expenses WHERE id=?', (expense_id,))
+#     conn.commit()
+#     conn.close()
+#     return redirect(url_for('index'))
+
+# if __name__ == '__main__':
+#     init_db()
+#     app.run(debug=True)
 
 # Сделать сайт удобным для мобильных устройств
 # Сделать так, чтобы сайт хорошо выглядел и работал на телефонах и планшетах. Это называется адаптивный дизайн.
